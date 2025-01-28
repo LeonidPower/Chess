@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chess Game</title>
+    <style>
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            border: 2px solid #333;
+            width: 480px;
+            margin: 20px auto;
+        }
+
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            cursor: pointer;
+        }
+
+        .white {
+            background-color: #f0d9b5;
+        }
+
+        .black {
+            background-color: #b58863;
+        }
+
+        .selected {
+            background-color: #779556 !important;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="status" id="status">White's turn</div>
+    <div class="board" id="board"></div>
+
+    <script>
+        const board = document.getElementById('board');
+        const status = document.getElementById('status');
+        let selectedPiece = null;
+        let isWhiteTurn = true;
+        let squares = [];
+
+        const pieces = {
+            white: {
+                king: '♔',
+                queen: '♕',
+                rook: '♖',
+                bishop: '♗',
+                knight: '♘',
+                pawn: '♙'
+            },
+            black: {
+                king: '♚',
+                queen: '♛',
+                rook: '♜',
+                bishop: '♝',
+                knight: '♞',
+                pawn: '♟'
+            }
+        };
+
+        // Initial board setup
+        const initialBoard = [
+            ['br', 'bn', 'bb', 'bq', 'bk', 'bb', 'bn', 'br'],
+            ['bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp'],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp'],
+            ['wr', 'wn', 'wb', 'wq', 'wk', 'wb', 'wn', 'wr']
+        ];
+
+
+        function createBoard() {
+            squares = [];
+            for (let row = 0; row < 8; row++) {
+                squares[row] = [];
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = `square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+
+                    const piece = initialBoard[row][col];
+                    if (piece) {
+                        const color = piece[0] === 'w' ? 'white' : 'black';
+                        const pieceType = piece[1];
+                        square.dataset.piece = {
+                            'p': 'pawn',
+                            'r': 'rook',
+                            'n': 'knight',
+                            'b': 'bishop',
+                            'q': 'queen',
+                            'k': 'king'
+                        }[pieceType];
+                        square.dataset.color = color;
+                        square.textContent = pieces[color][square.dataset.piece];
+                    }
+
+                    square.addEventListener('click', handleSquareClick);
+                    board.appendChild(square);
+                    squares[row][col] = square;
+                }
+            }
+        }
+
+        function handleSquareClick(e) {
+            const square = e.target;
+            const pieceColor = square.dataset.color;
+
+            if (selectedPiece) {
+                if (square !== selectedPiece && isValidMove(selectedPiece, square)) {
+                    movePiece(selectedPiece, square);
+                }
+                selectedPiece.classList.remove('selected');
+                selectedPiece = null;
+            } else if (pieceColor && ((isWhiteTurn && pieceColor === 'white') || (!isWhiteTurn && pieceColor === 'black'))) {
+                selectedPiece = square;
+                square.classList.add('selected');
+            }
+        }
+
+        function movePiece(from, to) {
+            // Update target square
+            to.dataset.piece = from.dataset.piece;
+            to.dataset.color = from.dataset.color;
+            to.textContent = from.textContent;
+
+            // Clear source square
+            from.dataset.piece = '';
+            from.dataset.color = '';
+            from.textContent = '';
+
+            isWhiteTurn = !isWhiteTurn;
+            status.textContent = `${isWhiteTurn ? 'White' : 'Black'}'s turn`;
+        }
+
+        function isValidMove(from, to) {
+            const fromRow = parseInt(from.dataset.row);
+            const fromCol = parseInt(from.dataset.col);
+            const toRow = parseInt(to.dataset.row);
+            const toCol = parseInt(to.dataset.col);
+            const piece = from.dataset.piece;
+            const color = from.dataset.color;
+            const targetColor = to.dataset.color;
+
+            // Can't capture own pieces
+            if (targetColor === color) return false;
+
+            const dx = Math.abs(toCol - fromCol);
+            const dy = Math.abs(toRow - fromRow);
+            const direction = color === 'white' ? -1 : 1;
+
+            switch(piece) {
+                case 'pawn':
+                    // Forward move
+                    if (dx === 0) {
+                        // Normal move
+                        if (toRow - fromRow === direction && !to.textContent) return true;
+                        // Initial two-square move
+                        if (fromRow === (color === 'white' ? 6 : 1) && 
+                            toRow - fromRow === 2 * direction && 
+                            !to.textContent && 
+                            !squares[fromRow + direction][fromCol].textContent) return true;
+                    }
+                    // Capture
+                    else if (dx === 1 && dy === 1) {
+                        if (to.textContent && targetColor !== color) return true;
+                    }
+                    return false;
+
+                case 'knight':
+                    return (dx === 2 && dy === 1) || (dx === 1 && dy === 2);
+
+                case 'bishop':
+                    if (dx !== dy) return false;
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+
+                case 'rook':
+                    if (dx !== 0 && dy !== 0) return false;
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+
+                case 'queen':
+                    if (dx !== dy && dx !== 0 && dy !== 0) return false;
+                    return isPathClear(fromRow, fromCol, toRow, toCol);
+
+                case 'king':
+                    return dx <= 1 && dy <= 1;
+
+                default:
+                    return false;
+            }
+        }
+
+        function isPathClear(fromRow, fromCol, toRow, toCol) {
+            const dx = Math.sign(toCol - fromCol);
+            const dy = Math.sign(toRow - fromRow);
+            let row = fromRow + dy;
+            let col = fromCol + dx;
+
+            while (row !== toRow || col !== toCol) {
+                if (squares[row][col].textContent) return false;
+                row += dy;
+                col += dx;
+            }
+            return true;
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
